@@ -5,8 +5,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Security;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RtpWebServer.ServerCore.Request;
 public class RequestProcessor {
@@ -18,15 +16,18 @@ public class RequestProcessor {
         var streamReader = new StreamReader(requestStream);
 
         var startLine = ProcessStartLine(streamReader, ref httpStatus);
-        if (startLine == null) return null;
+        if (startLine == null) {
+            return null;
+        }
 
         var headers = ProcessHeaders(streamReader, ref httpStatus);
-        if (headers == null) return null;
+        if (headers == null) {
+            return null;
+        }
 
         var body = ProcessBody(streamReader, headers, ref httpStatus);
 
         httpStatus.SetStausCode(200);
-
         RequestData data = new RequestData(startLine, headers, body);
         return data;
     }
@@ -79,16 +80,14 @@ public class RequestProcessor {
                 httpStatus.SetStausCode(400);
                 return null;
             }
-
             var headerData = line.Split(":", 2);
-
             if (headerData.Length != 2) {
                 httpStatus.SetStausCode(400);
                 return null;
             }
 
-            headerData[0] = headerData[0].ToLower() + ":";
-            headerData[1] = headerData[1].ToLower().TrimStart();
+            headerData[0] = headerData[0].ToLower();
+            headerData[1] = headerData[1].ToLower().TrimEnd('\r','\n').TrimStart();
 
             if (headerData[0].Contains(" ")) {
                 httpStatus.SetStausCode(400);
@@ -103,6 +102,15 @@ public class RequestProcessor {
             rHeadersSize += Encoding.ASCII.GetByteCount(line);
             headers.Add(headerData[0], headerData[1]);
         }
+
+        if (!headers.ContainsKey("Host".ToLower())) {
+            httpStatus.SetStausCode(400);
+            return null;
+        } else if (headers["Host".ToLower()] != ServerData.HostName){
+            httpStatus.SetStausCode(400);
+            return null;
+        }
+
         if (rHeadersSize > headersSize) {
             httpStatus.SetStausCode(400);
             return null;

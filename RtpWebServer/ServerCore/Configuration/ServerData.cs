@@ -6,7 +6,9 @@ namespace RtpWebServer.ServerCore.Configuration;
 public static class ServerData {
     public static string ServerWorkingDirectory { get; private set; } = "";
     public static List<string> ServerProtectedPaths { get; private set; } = new();
-    
+    public static string HostName { get; set; }
+    public static string MainPage { get; set; }
+
     public static bool IsRequestedPathAccesable(string requestedPath) {
         foreach (var i in ServerProtectedPaths) {
             if (requestedPath.Contains(i)) {

@@ -2,8 +2,10 @@
 using RtpWebServer.ServerCore.Error;
 using RtpWebServer.ServerCore.Redirect;
 using RtpWebServer.ServerCore.Request;
+using RtpWebServer.ServerCore.Response;
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
@@ -13,6 +15,7 @@ using System.Threading.Tasks;
 namespace RtpWebServer.ServerCore;
 public class HTTPSServer {
     HTTPSServerConfig httpsServerConfig;
+    public string EndLine { get; } = "\r\n";
     private int maxConnections => httpsServerConfig.MaxInstanceConnections;
     private int activeConnections = 0;
     public HTTPSServer(HTTPSServerConfig serverConfig) {
@@ -53,16 +56,44 @@ public class HTTPSServer {
 
             using StreamWriter sw = new(sslStream);
 
-            //*** NEED TO PROCESS REQ AND FORMAT RESPONSE ***
-             
             HTTPStatus httpStatus = new();
-            RequestData? rData = new RequestProcessor().ProcessRequest(sslStream, ref httpStatus);
+            RequestData? reqData = new RequestProcessor().ProcessRequest(sslStream, ref httpStatus);
 
-            byte[] message = Encoding.UTF8.GetBytes($"HTTP/1.1 {httpStatus.StatusCode} {httpStatus.Description}\r\n" + "\r\n");
-            await sslStream.WriteAsync(message);
+            ResponseData? respData = new();
+            if (reqData == null) {
+                respData = new ResponseBuilder().ExceptionResponse(ref reqData, ref httpStatus);
+            } else {
+                respData = new ResponseBuilder().BuildResponse(reqData, ref httpStatus);
+            }
+
+            bool keepConnection = false;
+            if (respData.Headers.ContainsKey("Connection".ToLower())) {
+                if (respData.Headers["Connection"] == "keep-alive") {
+                    keepConnection = true;
+                } else {
+                    keepConnection = false;
+                }
+            }
+
+            string headers = "";
+            foreach (var i in respData.Headers) {
+                headers += $"{i.Key} {i.Value}{EndLine}";
+            }
+
+            string respStr =
+                respData.StartLine +
+                headers +
+                EndLine;
+
+            byte[] respMsg = Encoding.ASCII.GetBytes(respStr);
+            byte[] respRtS = respMsg.Concat(respData.Body).ToArray();
+
+            await sslStream.WriteAsync(respRtS);
             sw.Flush();
-            sslStream.Close();
-            //*** NEED TO PROCESS REQ AND FORMAT RESPONSE ***
+
+            if (!keepConnection) {
+                sslStream.Close();
+            } 
         } catch (Exception e) {
             Console.WriteLine(e.Message);
         } finally {
